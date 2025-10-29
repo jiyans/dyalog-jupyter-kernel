@@ -107,29 +107,42 @@ class DyalogKernel(Kernel):
         self.send_response(self.iopub_socket, "execute_result", _content)
 
     def out_result(self, s):
-        # injecting css: white-space:pre. Means no wrapping, RIDE SetPW will take care about line wrapping
+        # Try to extract SVG
+        svg_match = re.search(r"<svg.*?</svg>", s, re.DOTALL | re.IGNORECASE)
 
-        # html_start = '<pre class="language-APL">'
-        # html_end = "</pre>"
+        if svg_match:
+            svg_content = svg_match.group(0)
 
-        _content = {
-            # 'output_type': 'display_data',
-            "data": {"text/plain": s.rstrip("\n")},
-            # 'data': {'text/html': html_start + html.escape(s, False) + html_end},
-            "execution_count": self.execution_count,
-            "metadata": {},
-            # 'transient': ''
-        }
+            # Build data dict with multiple representations
+            data = {
+                "image/svg+xml": svg_content,
+                "text/html": s,
+            }
+
+            _content = {
+                "data": data,
+                "execution_count": self.execution_count,
+                "metadata": {
+                    "image/svg+xml": {"isolated": True},
+                    "needs_background": "light",
+                },
+            }
+        else:
+            _content = {
+                "data": {"text/html": s},
+                "execution_count": self.execution_count,
+                "metadata": {},
+            }
 
         self.send_response(self.iopub_socket, "execute_result", _content)
 
-    def out_stream(self, s):
-        _content = {
-            "output_type": "stream",
-            "name": "stdin",  # stdin or stderr
-            "text": s.rstrip("\n"),
-        }
-        self.send_response(self.iopub_socket, "stream", _content)
+        def out_stream(self, s):
+            _content = {
+                "output_type": "stream",
+                "name": "stdin",  # stdin or stderr
+                "text": s.rstrip("\n"),
+            }
+            self.send_response(self.iopub_socket, "stream", _content)
 
     def dyalog_ride_connect(self):
 
@@ -446,7 +459,7 @@ class DyalogKernel(Kernel):
                                     )
 
                             elif received[0] == "ShowHTML":
-                                self.out_html(received[1].get("html"))
+                                self.out_result(received[1].get("html"))
                             elif received[0] == "HadError":
                                 # in case of error, set the flag err
                                 # it should be reset back to False only when prompt is available again.
