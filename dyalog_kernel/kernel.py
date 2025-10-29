@@ -107,18 +107,18 @@ class DyalogKernel(Kernel):
         self.send_response(self.iopub_socket, "execute_result", _content)
 
     def out_result(self, s):
+        """Send output with appropriate MIME type: SVG, HTML, or plain text."""
+
         # Try to extract SVG
         svg_match = re.search(r"<svg.*?</svg>", s, re.DOTALL | re.IGNORECASE)
 
         if svg_match:
+            # This is SVG content
             svg_content = svg_match.group(0)
-
-            # Build data dict with multiple representations
             data = {
                 "image/svg+xml": svg_content,
-                "text/html": s,
+                "text/plain": s,  # Fallback to plain text
             }
-
             _content = {
                 "data": data,
                 "execution_count": self.execution_count,
@@ -127,22 +127,33 @@ class DyalogKernel(Kernel):
                     "needs_background": "light",
                 },
             }
-        else:
+        elif s.strip().startswith("<") and ">" in s:
+            # This looks like HTML (but not SVG)
             _content = {
-                "data": {"text/html": s},
+                "data": {
+                    "text/html": s,
+                    "text/plain": s,  # Also provide plain text
+                },
+                "execution_count": self.execution_count,
+                "metadata": {},
+            }
+        else:
+            # This is just plain text
+            _content = {
+                "data": {"text/plain": s.rstrip("\n")},
                 "execution_count": self.execution_count,
                 "metadata": {},
             }
 
         self.send_response(self.iopub_socket, "execute_result", _content)
 
-        def out_stream(self, s):
-            _content = {
-                "output_type": "stream",
-                "name": "stdin",  # stdin or stderr
-                "text": s.rstrip("\n"),
-            }
-            self.send_response(self.iopub_socket, "stream", _content)
+    def out_stream(self, s):
+        _content = {
+            "output_type": "stream",
+            "name": "stdin",  # stdin or stderr
+            "text": s.rstrip("\n"),
+        }
+        self.send_response(self.iopub_socket, "stream", _content)
 
     def dyalog_ride_connect(self):
 
